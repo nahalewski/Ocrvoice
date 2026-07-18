@@ -6,6 +6,19 @@ const reportingAgencies=[
   ["LexisNexis","LexisNexis Risk Solutions"],["ChexSystems","ChexSystems"],["EarlyWarning","Early Warning Services"],
   ["ClarityServices","Experian Clarity Services"],["DataX","DataX"],["CoreLogicTeletrack","Teletrack (now DataX)"],["NCTUE","NCTUE"]
 ];
+const disputeChannels={
+  Experian:{name:"Experian",mode:"portal",url:"https://www.experian.com/help/dispute-credit/"},
+  TransUnion:{name:"TransUnion",mode:"portal",url:"https://www.transunion.com/credit-disputes/dispute-your-credit"},
+  Equifax:{name:"Equifax",mode:"portal",url:"https://my.equifax.com/"},
+  Innovis:{name:"Innovis",mode:"portal",url:"https://www.innovis.com/personal/disputeResolution"},
+  LexisNexis:{name:"LexisNexis Risk Solutions",mode:"assisted",url:"https://consumer.risk.lexisnexis.com/contact"},
+  ChexSystems:{name:"ChexSystems",mode:"portal",url:"https://www.chexsystems.com/dispute"},
+  EarlyWarning:{name:"Early Warning Services",mode:"document",url:"https://www.earlywarning.com/dispute-file-disclosure"},
+  ClarityServices:{name:"Experian Clarity Services",mode:"assisted",url:"https://consumers.clarityservices.com/"},
+  DataX:{name:"DataX",mode:"document",url:"https://consumers.dataxltd.com/"},
+  CoreLogicTeletrack:{name:"Teletrack (now handled through DataX)",mode:"document",url:"https://consumers.teletrack.com/"},
+  NCTUE:{name:"NCTUE",mode:"assisted",url:"https://www.nctue.com/"}
+};
 let state=JSON.parse(localStorage.getItem(KEY)||"null")||structuredClone(blank);
 const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(state)),esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 $("markBureau").innerHTML=reportingAgencies.map(([value,label])=>`<option value="${value}">${label}</option>`).join("");
@@ -62,7 +75,22 @@ function renderMarks(){
   }).join("")||"<p class='subtle'>No report marks added yet.</p>";
   document.querySelectorAll("[data-delete]").forEach(button=>button.onclick=()=>{state.marks.splice(Number(button.dataset.delete),1);save();renderAll()});
 }
-function renderAll(){renderScores();renderOverview();renderProfile();renderMarks()}
+function letterText(mark){
+  const agency=disputeChannels[mark.bureau]?.name||mark.bureau,documents=(mark.documents||[]).map(path=>path.split(/[\\/]/).pop()).filter(Boolean);
+  return `[Your full legal name]\n[Your mailing address]\n[City, State ZIP]\n[Date]\n\n${agency}\n[Use the current dispute address shown on your report or the official instructions linked below]\n\nRe: Request to reinvestigate inaccurate or incomplete consumer-report information\nReport/reference number: [Reference number, if available]\n\nTo whom it may concern:\n\nI am writing to dispute information in my consumer report that I believe is inaccurate or incomplete.\n\nItem being disputed: ${mark.creditor}\nWhat the report states:\n${mark.reported||"[Describe exactly what the report states]"}\n\nWhy it is inaccurate or incomplete:\n${mark.reason}\n\nFacts and supporting evidence:\n${mark.evidenceFacts||"[Add the facts your records support before sending]"}\n\nPlease conduct a reasonable reinvestigation and correct the information. If the information cannot be verified as complete and accurate, please delete it from my file. Please send me the written results and an updated copy of my consumer report.\n\nEnclosures (copies, not originals):\n${documents.length?documents.map(name=>`- ${name}`).join("\n"):"- [List supporting records]"}\n- [Copy of identification/address proof only if the agency requires it]\n\nSincerely,\n\n[Signature]\n[Printed legal name]`;
+}
+function filingSteps(channel){
+  if(channel.mode==="portal")return ["Open the official dispute portal and authenticate directly with the agency.","Select the exact report item; do not dispute other accurate information.","Use the letter facts in the portal fields and upload copies of supporting evidence.","Review every statement, submit it yourself, and save the confirmation and result."];
+  if(channel.mode==="document")return ["Open the official instructions and confirm the current secure-upload or mailing destination.","Download the letter, replace every placeholder, then print and sign it if mailing.","Include copies—not originals—of relevant evidence and only the identity documents requested.","Use tracked mail or retain the secure-upload receipt, plus a complete copy of what you sent."];
+  return ["Open the official consumer-support page and obtain your current disclosure/report first.","Ask the agency to confirm its current dispute delivery method and address.","Complete the generated letter and attach copies of evidence tied to the exact item.","Keep the delivery confirmation and written investigation result."];
+}
+function renderLetters(){
+  const eligible=state.marks.map((mark,index)=>({mark,index})).filter(({mark})=>mark.accuracy==="yes"&&mark.reason);
+  $("letterList").innerHTML=eligible.map(({mark,index})=>{const channel=disputeChannels[mark.bureau]||{name:mark.bureau,mode:"assisted",url:"#"},steps=filingSteps(channel);return `<article class="mark-card"><span class="badge yes">Ready to draft</span><h3>${esc(channel.name)} — ${esc(mark.creditor)}</h3><ol>${steps.map(step=>`<li>${esc(step)}</li>`).join("")}</ol><p><a href="${esc(channel.url)}" target="_blank" rel="noopener noreferrer">Open official agency instructions</a></p><label>Editable letter<textarea id="letter-${index}" rows="22">${esc(letterText(mark))}</textarea></label><button data-letter-download="${index}" class="primary">Download letter</button> <button data-letter-copy="${index}">Copy letter</button></article>`}).join("")||"<div class='form-card'><p class='subtle'>No letters are ready. In Report marks, confirm an item is inaccurate or incomplete, enter the exact reason, and record supporting facts.</p></div>";
+  document.querySelectorAll("[data-letter-download]").forEach(button=>button.onclick=()=>{const index=button.dataset.letterDownload,mark=state.marks[index],name=`${mark.bureau}-${mark.creditor}`.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");const text=$("letter-"+index).value,blob=new Blob([text],{type:"text/plain;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${name||"dispute"}-letter.txt`;a.click();URL.revokeObjectURL(a.href)});
+  document.querySelectorAll("[data-letter-copy]").forEach(button=>button.onclick=async()=>{const index=button.dataset.letterCopy;try{await navigator.clipboard.writeText($("letter-"+index).value);button.textContent="Copied"}catch{alert("Copy was blocked. Select the letter text and copy it manually.")}});
+}
+function renderAll(){renderScores();renderOverview();renderProfile();renderMarks();renderLetters()}
 $("insuranceScore").onchange=()=>{state.insurance=$("insuranceScore").value;save()};
 $("saveProfile").onclick=()=>{for(const id of ["preferredName","state","city","reviewDate","facts"])state.profile[id]=$(id).value.trim();save();renderAll()};
 $("addMark").onclick=()=>{const accuracy=document.querySelector('input[name="accuracy"]:checked')?.value;if(!$("markCreditor").value.trim()||!accuracy)return alert("Enter the report item and answer the accuracy question.");state.marks.push({bureau:$("markBureau").value,creditor:$("markCreditor").value.trim(),type:$("markType").value,date:$("markDate").value,reported:$("reported").value.trim(),evidenceFacts:$("evidenceFacts").value.trim(),accuracy,reason:$("reason").value.trim(),documents:$("documents").value.split("\n").map(v=>v.trim()).filter(Boolean),projectLow:$("projectLow").value,projectHigh:$("projectHigh").value,projectSource:$("projectSource").value.trim()});save();["markCreditor","markDate","reported","evidenceFacts","reason","documents","projectLow","projectHigh","projectSource"].forEach(id=>$(id).value="");document.querySelectorAll('input[name="accuracy"]').forEach(r=>r.checked=false);renderAll()};

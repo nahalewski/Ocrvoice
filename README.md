@@ -28,6 +28,13 @@ The tool does not invent projected point increases. You may record a range only
 when it came from a named score simulator or lender tool; it remains a scenario,
 not a prediction.
 
+Text-based PDF reports can be opened in the Upload reports tab. Extraction runs
+in the visitor's browser and does not send the PDF to the Render server. The
+result is a candidate list, not a finding that an item is wrong. After the user
+records factual evidence and marks an item inaccurate or incomplete, the
+Letters & instructions tab creates an editable dispute letter and links to the
+agency's official filing channel. The user must verify, sign, and submit it.
+
 ## Consumer-report copilot
 
 Add report marks in the dashboard. Only items marked factually inaccurate or

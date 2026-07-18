@@ -1,0 +1,14 @@
+{
+  "name": "experian-dispute-copilot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node dashboard-server.mjs",
+    "bot": "node bot.mjs",
+    "check": "node --check bot.mjs && node --check dashboard-server.mjs && node --check dashboard/app.js"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0"
+  }
+}

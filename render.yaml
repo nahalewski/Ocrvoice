@@ -1,12 +1,15 @@
 services:
   - type: web
-    name: dialogue-lantern
+    name: credit-report-studio
     runtime: node
     plan: free
-    rootDir: web
-    buildCommand: npm install && npm run build:render
-    startCommand: npm run start
+    buildCommand: npm install
+    startCommand: npm start
     healthCheckPath: /
     envVars:
       - key: NODE_VERSION
-        value: 22.13.0
+        value: 22.22.1
+      - key: APP_USERNAME
+        sync: false
+      - key: APP_PASSWORD
+        sync: false

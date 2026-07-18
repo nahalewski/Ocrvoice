@@ -42,6 +42,12 @@ The fraud path links to IdentityTheft.gov and reminds the user to contact the
 creditor's fraud department. There is intentionally no bulk "dispute all"
 control because each identity-theft statement must be true for that account.
 
+The default mobile interface is a three-step wizard: upload one report, review
+one account card at a time, then download all prepared letters together. Full
+tradeline details are collapsed, and account decisions automatically advance
+to the next card. Scores, profile fields, manual entry, and bot export remain
+available behind the optional Advanced menu.
+
 ## Consumer-report copilot
 
 Add report marks in the dashboard. Only items marked factually inaccurate or

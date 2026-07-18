@@ -9,6 +9,7 @@
     "check": "node --check bot.mjs && node --check dashboard-server.mjs && node --check dashboard/app.js"
   },
   "dependencies": {
+    "pdfjs-dist": "^6.1.200",
     "playwright": "^1.55.0"
   }
 }

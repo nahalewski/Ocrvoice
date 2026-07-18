@@ -1,0 +1,11 @@
+.cameraButton { border: 1px solid var(--gold); background: transparent; color: var(--gold); padding: 15px 22px; border-radius: 2px; font-weight: 800; }
+.cameraButton:hover { background: rgba(217, 172, 85, .1); }
+.cameraButton:disabled { opacity: .6; cursor: wait; }
+@media (max-width: 520px) {
+  .actions .primary, .actions .cameraButton { width: 100%; }
+  .privacy { width: 100%; text-align: center; }
+  .viewerPanel, .controlPanel { padding-top: 24px; }
+  .viewer { min-height: 240px; }
+  .hero { padding-bottom: 46px; }
+  h1 { font-size: 54px; }
+}

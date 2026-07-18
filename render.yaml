@@ -4,8 +4,8 @@ services:
     runtime: node
     plan: free
     rootDir: web
-    buildCommand: npm install && npm run build
-    startCommand: npm run start -- --host 0.0.0.0 --port $PORT
+    buildCommand: npm install && npm run build:render
+    startCommand: npm run start
     healthCheckPath: /
     envVars:
       - key: NODE_VERSION

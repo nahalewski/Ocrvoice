@@ -28,6 +28,10 @@ export default function Home() {
   const candidateCount = useRef(0);
   const lastSpoken = useRef("");
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const utterancesRef = useRef(new Set<SpeechSynthesisUtterance>());
+  const voiceNameRef = useRef("");
+  const rateRef = useRef(1);
+  const mutedRef = useRef(false);
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("Choose the OBS preview or game window to begin.");
   const [dialogue, setDialogue] = useState("Waiting for dialogue…");
@@ -38,25 +42,38 @@ export default function Home() {
   const [muted, setMuted] = useState(false);
   const [showCrop, setShowCrop] = useState(true);
   const [captureMode, setCaptureMode] = useState<CaptureMode>(null);
+  const [voiceStatus, setVoiceStatus] = useState("Tap Test voice once to enable audio on iPhone.");
 
   useEffect(() => {
     const refreshVoices = () => {
       const list = window.speechSynthesis.getVoices();
       voicesRef.current = list; setVoices(list);
-      if (!voiceName && list.length) setVoiceName((list.find((v) => v.lang.startsWith("en")) ?? list[0]).name);
+      if (!voiceNameRef.current && list.length) {
+        const selected = (list.find((v) => v.lang.startsWith("en")) ?? list[0]).name;
+        voiceNameRef.current = selected; setVoiceName(selected);
+      }
     };
     refreshVoices(); window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
     return () => { window.speechSynthesis.removeEventListener("voiceschanged", refreshVoices); stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function speak(text: string) {
-    if (muted) return;
-    window.speechSynthesis.cancel();
+  function speak(text: string, fromUserTap = false) {
+    if (mutedRef.current) return;
+    if (fromUserTap) window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = rate; utterance.pitch = .86; utterance.volume = 1;
-    utterance.voice = voicesRef.current.find((v) => v.name === voiceName) ?? null;
+    utterance.rate = rateRef.current; utterance.pitch = .86; utterance.volume = 1;
+    utterance.voice = voicesRef.current.find((v) => v.name === voiceNameRef.current) ?? null;
+    utterancesRef.current.add(utterance);
+    utterance.onstart = () => setVoiceStatus(`Speaking with ${utterance.voice?.name || "device voice"}…`);
+    utterance.onend = () => { utterancesRef.current.delete(utterance); setVoiceStatus("Voice ready"); };
+    utterance.onerror = () => { utterancesRef.current.delete(utterance); setVoiceStatus("Speech was blocked—tap Test voice, then try again."); };
     window.speechSynthesis.speak(utterance);
+  }
+  function enableVoice() {
+    // iOS Safari requires speech to start synchronously inside a user gesture.
+    speak("Voice ready.", true);
   }
   async function ensureWorker() {
     if (workerRef.current) return workerRef.current;
@@ -111,6 +128,7 @@ export default function Home() {
     scan();
   }
   async function startScreen() {
+    enableVoice();
     if (!navigator.mediaDevices?.getDisplayMedia) { setStatus("error"); setMessage("Screen sharing is not supported here. Use current Chrome or Edge."); return; }
     try {
       await ensureWorker();
@@ -119,6 +137,7 @@ export default function Home() {
     } catch (error) { if ((error as DOMException).name !== "NotAllowedError") console.error(error); setStatus("idle"); setMessage("Screen sharing was canceled. Choose the OBS preview when ready."); }
   }
   async function startCamera() {
+    enableVoice();
     if (!navigator.mediaDevices?.getUserMedia) { setStatus("error"); setMessage("Camera access is not supported in this browser."); return; }
     try {
       await ensureWorker();
@@ -145,7 +164,7 @@ export default function Home() {
     <section className="hero" id="top"><div className="eyebrow">LIVE GAME ACCESSIBILITY</div><h1>Let every line<br />find its voice.</h1><p className="lede">Share your OBS preview, or point a phone or tablet at the TV. Dialogue Lantern finds Zelda-style dialogue, ignores menus, and reads new lines aloud using voices already on your device.</p><div className="actions">{isRunning ? <button className="primary" onClick={stop}>Stop reading</button> : <><button className="primary" onClick={startScreen} disabled={status === "loading"}>{status === "loading" ? "Loading reader…" : "Share screen"}</button><button className="cameraButton" onClick={startCamera} disabled={status === "loading"}>Use rear camera</button></>}<span className="privacy">No video is uploaded or saved</span></div></section>
     <section className="workspace">
       <div className="viewerPanel"><div className="panelHeader"><div><span className="step">01</span><h2>{captureMode === "camera" ? "TV camera view" : "Screen preview"}</h2></div><label className="switchLabel"><input type="checkbox" checked={showCrop} onChange={(e) => setShowCrop(e.target.checked)} /><span className="switch" />Show scan area</label></div><div className="viewer"><video ref={videoRef} muted playsInline autoPlay />{showCrop && <div className="scanArea"><span>Align dialogue here</span></div>}{!isRunning && <div className="emptyState"><div className="frameIcon" /><strong>No video connected</strong><p>Share an OBS/game window, or use the rear camera and aim it at your TV.</p></div>}</div><canvas ref={cropRef} className="hiddenCanvas" /><p className="systemMessage"><span className={`dot ${isRunning ? "on" : ""}`} />{message}</p></div>
-      <aside className="controlPanel"><div className="panelHeader"><div><span className="step">02</span><h2>Voice & reading</h2></div></div><label className="fieldLabel" htmlFor="voice">Device voice</label><select id="voice" value={voiceName} onChange={(e) => setVoiceName(e.target.value)}>{voices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} · {voice.lang}</option>)}</select><div className="rangeRow"><label htmlFor="rate">Reading speed</label><output>{rate.toFixed(1)}×</output></div><input id="rate" type="range" min="0.6" max="1.5" step="0.1" value={rate} onChange={(e) => setRate(Number(e.target.value))} /><button className="secondary" onClick={() => speak("The dialogue reader is ready.")}>Test voice</button><label className="mute"><input type="checkbox" checked={muted} onChange={(e) => setMuted(e.target.checked)} />Mute spoken dialogue</label><div className="note"><strong>Browser voice</strong><p>This version uses speech built into your browser and operating system. It does not use ElevenLabs.</p></div></aside>
+      <aside className="controlPanel"><div className="panelHeader"><div><span className="step">02</span><h2>Voice & reading</h2></div></div><label className="fieldLabel" htmlFor="voice">Device voice</label><select id="voice" value={voiceName} onChange={(e) => { voiceNameRef.current = e.target.value; setVoiceName(e.target.value); }}>{voices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} · {voice.lang}</option>)}</select><div className="rangeRow"><label htmlFor="rate">Reading speed</label><output>{rate.toFixed(1)}×</output></div><input id="rate" type="range" min="0.6" max="1.5" step="0.1" value={rate} onChange={(e) => { const value = Number(e.target.value); rateRef.current = value; setRate(value); }} /><button className="secondary" onClick={enableVoice}>Test voice</button><p className="voiceStatus" aria-live="polite">{voiceStatus}</p><label className="mute"><input type="checkbox" checked={muted} onChange={(e) => { mutedRef.current = e.target.checked; setMuted(e.target.checked); }} />Mute spoken dialogue</label><div className="note"><strong>Browser voice</strong><p>This version uses speech built into your browser and operating system. It does not use ElevenLabs.</p></div></aside>
     </section>
     <section className="transcript"><div className="transcriptLead"><span className="step">03</span><div><h2>Detected dialogue</h2><p>The same line must appear twice before it is spoken, preventing flicker and repeats.</p></div></div><blockquote>{dialogue}</blockquote>{history.length > 1 && <div className="history">{history.slice(1).map((line, i) => <p key={`${line}-${i}`}>{line}</p>)}</div>}</section>
     <footer><span>Best with a 16:9 Tears of the Kingdom picture.</span><span>Rear camera works on iPhone, iPad, and Android.</span></footer>

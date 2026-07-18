@@ -1,3 +1,6 @@
 .mark-card label:has(input[type="checkbox"]){display:flex;align-items:center;gap:10px}
 .mark-card input[type="checkbox"]{width:auto}
 .mark-card pre{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted);font:13px/1.5 ui-monospace,SFMono-Regular,monospace}
+.quick-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
+.quick-actions button{min-height:48px}
+@media(max-width:760px){.quick-actions{grid-template-columns:1fr}.quick-actions button{width:100%}}

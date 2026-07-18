@@ -35,6 +35,13 @@ records factual evidence and marks an item inaccurate or incomplete, the
 Letters & instructions tab creates an editable dispute letter and links to the
 agency's official filing channel. The user must verify, sign, and submit it.
 
+For extracted accounts, the simplified workflow offers three per-account
+choices: not recognized, identity theft/fraud, or accurate/skip. The first two
+prefill the factual reason and create the appropriate letter and instructions.
+The fraud path links to IdentityTheft.gov and reminds the user to contact the
+creditor's fraud department. There is intentionally no bulk "dispute all"
+control because each identity-theft statement must be true for that account.
+
 ## Consumer-report copilot
 
 Add report marks in the dashboard. Only items marked factually inaccurate or

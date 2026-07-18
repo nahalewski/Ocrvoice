@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createWorker, type Worker } from "tesseract.js";
+import type { Worker } from "tesseract.js";
 
 type Status = "idle" | "loading" | "ready" | "scanning" | "error";
 const ROI = { left: .29, top: .76, right: .75, bottom: .95 };
@@ -59,6 +59,9 @@ export default function Home() {
   async function ensureWorker() {
     if (workerRef.current) return workerRef.current;
     setStatus("loading"); setMessage("Loading the on-device dialogue reader…");
+    // Tesseract relies on browser worker APIs. Loading it lazily prevents the
+    // package's Node entry point from being evaluated by Render during SSR.
+    const { createWorker } = await import("tesseract.js");
     const worker = await createWorker("eng", 1, { logger: (event) => {
       if (event.status === "recognizing text") setMessage(`Reading dialogue… ${Math.round(event.progress * 100)}%`);
     }});

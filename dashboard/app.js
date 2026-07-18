@@ -46,6 +46,28 @@ function extractCandidates(text){
   }
   return results;
 }
+function transUnionLines(items){
+  const sorted=[...items].filter(item=>item.str?.trim()).sort((a,b)=>Math.abs(b.y-a.y)>2?b.y-a.y:a.x-b.x),lines=[];
+  for(const item of sorted){const current=lines.at(-1);if(current&&Math.abs(current.y-item.y)<=2)current.parts.push(item);else lines.push({y:item.y,parts:[item]})}
+  return lines.map(line=>line.parts.sort((a,b)=>a.x-b.x).map(item=>item.str.trim()).filter(Boolean).join(" ").replace(/\s+/g," ").trim()).filter(Boolean);
+}
+function extractTransUnionCandidates(pageItems){
+  const labels=["Date Opened","Responsibility","Account Type","Loan Type","Balance","Date Updated","Payment Received","Last Payment Made","Pay Status","Terms","Date Closed","High Balance (Hist.)","Credit Limit (Hist.)","Estimated month and year this item will be removed","Maximum Delinquency","Remarks"];
+  const labelPattern=new RegExp(`^(${labels.map(label=>label.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")})$`,"i"),results=[];
+  for(const page of pageItems){
+    const items=page.items,headings=items.filter((item,index)=>item.str.trim()&&item.x>=30&&item.x<=50&&item.height>=13.5&&item.height<=16&&items.slice(index+1,index+8).some(next=>next.y<item.y&&item.y-next.y<120&&/^(Address|Phone|Date Opened)$/i.test(next.str.trim()))).sort((a,b)=>b.y-a.y);
+    for(let index=0;index<headings.length;index++){
+      const heading=headings[index],lower=headings[index+1]?.y??-Infinity,card=items.filter(item=>item.y<=heading.y+2&&item.y>lower+2),lines=transUnionLines(card),fields=[];
+      for(let lineIndex=0;lineIndex<lines.length;lineIndex++){
+        const label=lines[lineIndex].match(labelPattern)?.[1];if(!label)continue;
+        const value=lines[lineIndex+1]&&!labelPattern.test(lines[lineIndex+1])&&!/^Payment History$/i.test(lines[lineIndex+1])?lines[lineIndex+1]:"Not shown";
+        fields.push(`${label}: ${value}`);
+      }
+      if(fields.some(field=>/^Pay Status:|^Account Type:|^Date Opened:/i.test(field)))results.push({title:heading.str.trim(),reported:fields.join("\n"),fingerprint:`tu-${page.page}-${Math.round(heading.y)}`});
+    }
+  }
+  return results;
+}
 function renderExtracted(){
   $("extractedAccounts").innerHTML=extracted.length?`<div class="form-card"><div class="row"><div><h3>Review extracted candidates</h3><p class="subtle">Extraction is not proof of an error. Select only items you want to investigate.</p></div><button id="addExtracted" class="primary">Add selected to review queue</button></div>${extracted.map((item,index)=>`<div class="mark-card"><label><input type="checkbox" data-extracted="${index}"> <strong>${esc(item.title)}</strong></label><pre>${esc(item.reported)}</pre></div>`).join("")}</div>`:"";
   const add=$("addExtracted");if(add)add.onclick=()=>{const selected=[...document.querySelectorAll("[data-extracted]:checked")].map(input=>extracted[Number(input.dataset.extracted)]);if(!selected.length)return alert("Select at least one extracted item.");for(const item of selected)state.marks.push({bureau:$("uploadBureau").value,creditor:item.title,type:"Other",date:"",reported:item.reported,evidenceFacts:"",accuracy:"unsure",reason:"",documents:[],projectLow:"",projectHigh:"",projectSource:""});save();renderAll();alert(`${selected.length} item(s) added. Open Report marks and verify each one against your records.`)};
@@ -53,7 +75,7 @@ function renderExtracted(){
 $("scanReport").onclick=async()=>{
   const file=$("reportFile").files[0];if(!file)return alert("Choose a PDF report first.");
   $("scanStatus").textContent="Reading the PDF on this device…";$("scanReport").disabled=true;extracted=[];renderExtracted();
-  try{const data=new Uint8Array(await file.arrayBuffer()),pdf=await pdfjsLib.getDocument({data}).promise;let text="";for(let pageNumber=1;pageNumber<=pdf.numPages;pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent();text+=content.items.map(item=>`${item.str}${item.hasEOL?"\n":" "}`).join("")+"\n"}if(text.replace(/\s/g,"").length<80)throw new Error("This appears to be an image-only scan. Export a text-based report PDF or use OCR first.");extracted=extractCandidates(text);$("scanStatus").textContent=extracted.length?`Found ${extracted.length} possible report item(s). Review them below.`:"Text was extracted, but no account-like sections were found. You can add the item manually under Report marks.";renderExtracted()}catch(error){$("scanStatus").textContent=`Could not extract this PDF: ${error.message}`}finally{$("scanReport").disabled=false}
+  try{const data=new Uint8Array(await file.arrayBuffer()),pdf=await pdfjsLib.getDocument({data}).promise;let text="";const pageItems=[];for(let pageNumber=1;pageNumber<=pdf.numPages;pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent();text+=content.items.map(item=>`${item.str}${item.hasEOL?"\n":" "}`).join("")+"\n";pageItems.push({page:pageNumber,items:content.items.map(item=>({str:item.str,x:item.transform[4],y:item.transform[5],height:item.height}))})}if(text.replace(/\s/g,"").length<80)throw new Error("This appears to be an image-only scan. Export a text-based report PDF or use OCR first.");extracted=$("uploadBureau").value==="TransUnion"?extractTransUnionCandidates(pageItems):extractCandidates(text);const specialized=$("uploadBureau").value==="TransUnion"?" TransUnion tradeline card(s)":" possible report item(s)";$("scanStatus").textContent=extracted.length?`Found ${extracted.length}${specialized}. Review them below.`:"Text was extracted, but no account-like sections were found. Confirm the selected agency matches the PDF, or add the item manually under Report marks.";renderExtracted()}catch(error){$("scanStatus").textContent=`Could not extract this PDF: ${error.message}`}finally{$("scanReport").disabled=false}
 };
 document.querySelectorAll("nav button").forEach(button=>button.onclick=()=>{document.querySelectorAll("nav button,.tab").forEach(node=>node.classList.remove("active"));button.classList.add("active");$(button.dataset.tab).classList.add("active")});
 function renderScores(){

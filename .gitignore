@@ -1,0 +1,15 @@
+## .NET build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Plugin packaging output
+artifacts/
+*.zip
+
+## OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/

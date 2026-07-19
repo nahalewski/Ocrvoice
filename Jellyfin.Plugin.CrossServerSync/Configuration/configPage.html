@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Cross-Server Sync</title>
+</head>
+<body>
+<div id="crossServerSyncPage" data-role="page" class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-select,emby-checkbox,emby-collapse">
+    <div data-role="content">
+        <div class="content-primary">
+
+            <div class="verticalSection">
+                <h2 class="sectionTitle">Cross-Server Sync</h2>
+                <p class="fieldDescription">
+                    Compares this server's Movies and TV Shows against a second Jellyfin
+                    server using Jellyfin metadata (provider IDs and season/episode numbers),
+                    not file names, and fills in what is missing without overwriting anything.
+                </p>
+            </div>
+
+            <form class="crossServerSyncConfigForm">
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="RemoteServerUrl">Remote server URL</label>
+                    <input is="emby-input" type="url" id="RemoteServerUrl"
+                           placeholder="http://jellyfin.naha.orosapp.us/" />
+                    <div class="fieldDescription">The other Jellyfin server this one should sync with.</div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="RemoteServerName">Remote server name</label>
+                    <input is="emby-input" type="text" id="RemoteServerName" placeholder="Remote server" />
+                    <div class="fieldDescription">A friendly label shown in the comparison below.</div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="RemoteApiKey">Remote API key</label>
+                    <input is="emby-input" type="password" id="RemoteApiKey" autocomplete="off" />
+                    <div class="fieldDescription">
+                        Create on the remote server under Dashboard &gt; API Keys. Used to read the
+                        remote library and download files. Leave blank to keep the saved key.
+                    </div>
+                </div>
+
+                <div class="selectContainer">
+                    <label class="selectLabel" for="Direction">Sync direction</label>
+                    <select is="emby-select" id="Direction">
+                        <option value="PullFromRemote">Pull missing items to this server</option>
+                        <option value="PushToRemote">Detect items missing on the remote (report only)</option>
+                        <option value="Bidirectional">Both directions (report both, pull here)</option>
+                    </select>
+                    <div class="fieldDescription">
+                        This plugin can only write files to <em>this</em> server's disks, so transfers
+                        always pull here. To fill gaps on the other server, install this plugin there too
+                        and point it back at this one.
+                    </div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="ReservedSpaceGb">Keep free on target drive (GB)</label>
+                    <input is="emby-input" type="number" id="ReservedSpaceGb" min="0" step="1" />
+                    <div class="fieldDescription">
+                        A transfer is skipped if completing it would drop the target drive below this
+                        amount of free space. Default 100 GB.
+                    </div>
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="MovieDestinationPath">Movie destination folder (optional)</label>
+                    <input is="emby-input" type="text" id="MovieDestinationPath"
+                           placeholder="Auto-detected from your Movies library" />
+                </div>
+
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="TvDestinationPath">TV destination folder (optional)</label>
+                    <input is="emby-input" type="text" id="TvDestinationPath"
+                           placeholder="Auto-detected from your TV Shows library" />
+                    <div class="fieldDescription">
+                        Leave blank to use the first Movies / TV Shows library folder. Files land in
+                        <code>Movie Name (Year)/</code> and <code>Series Name (Year)/Season NN/</code>
+                        folders so the scanner recognises them.
+                    </div>
+                </div>
+
+                <label class="checkboxContainer">
+                    <input is="emby-checkbox" type="checkbox" id="AutoSync" />
+                    <span>Automatically pull an item as soon as it is detected missing</span>
+                </label>
+
+                <label class="checkboxContainer">
+                    <input is="emby-checkbox" type="checkbox" id="RefreshLibraryAfterSync" />
+                    <span>Refresh the library after a sync so new files appear immediately</span>
+                </label>
+
+                <label class="checkboxContainer">
+                    <input is="emby-checkbox" type="checkbox" id="NeverOverwrite" checked disabled />
+                    <span>Never overwrite existing files (always enforced)</span>
+                </label>
+
+                <br />
+                <button is="emby-button" type="submit" class="raised button-submit block">
+                    <span>Save</span>
+                </button>
+                <button is="emby-button" type="button" id="testConnection" class="raised block">
+                    <span>Test connection</span>
+                </button>
+            </form>
+
+            <div class="verticalSection" style="margin-top:2em;">
+                <h2 class="sectionTitle">Library comparison</h2>
+                <button is="emby-button" type="button" id="compareNow" class="raised block">
+                    <span>Compare with remote now</span>
+                </button>
+                <button is="emby-button" type="button" id="syncAllHere" class="raised block" style="display:none;">
+                    <span>Pull everything missing here</span>
+                </button>
+                <div id="comparisonSummary" class="fieldDescription" style="margin-top:1em;"></div>
+                <div id="comparisonResults" style="margin-top:1em;"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="text/javascript">
+    (function () {
+        var pluginId = 'b8b5f6a2-3c1e-4e7a-9d2b-2a7f5c9e11d4';
+
+        function byId(id) { return document.getElementById(id); }
+
+        function loadConfig(page) {
+            Dashboard.showLoadingMsg();
+            ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                byId('RemoteServerUrl').value = config.RemoteServerUrl || '';
+                byId('RemoteServerName').value = config.RemoteServerName || '';
+                byId('RemoteApiKey').value = '';
+                byId('RemoteApiKey').placeholder = config.RemoteApiKey ? '•••••• (saved)' : '';
+                byId('Direction').value = config.Direction || 'PullFromRemote';
+                byId('ReservedSpaceGb').value = config.ReservedSpaceGb != null ? config.ReservedSpaceGb : 100;
+                byId('MovieDestinationPath').value = config.MovieDestinationPath || '';
+                byId('TvDestinationPath').value = config.TvDestinationPath || '';
+                byId('AutoSync').checked = !!config.AutoSync;
+                byId('RefreshLibraryAfterSync').checked = config.RefreshLibraryAfterSync !== false;
+                Dashboard.hideLoadingMsg();
+            });
+        }
+
+        function saveConfig(page) {
+            Dashboard.showLoadingMsg();
+            ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                config.RemoteServerUrl = byId('RemoteServerUrl').value.trim();
+                config.RemoteServerName = byId('RemoteServerName').value.trim();
+                var key = byId('RemoteApiKey').value;
+                if (key && key.length > 0) {
+                    config.RemoteApiKey = key.trim();
+                }
+                config.Direction = byId('Direction').value;
+                config.ReservedSpaceGb = parseFloat(byId('ReservedSpaceGb').value) || 0;
+                config.MovieDestinationPath = byId('MovieDestinationPath').value.trim();
+                config.TvDestinationPath = byId('TvDestinationPath').value.trim();
+                config.AutoSync = byId('AutoSync').checked;
+                config.RefreshLibraryAfterSync = byId('RefreshLibraryAfterSync').checked;
+                config.NeverOverwrite = true;
+                ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
+                    Dashboard.processPluginConfigurationUpdateResult(result);
+                });
+            });
+        }
+
+        function apiUrl(path) { return ApiClient.getUrl('CrossServerSync/' + path); }
+
+        function testConnection() {
+            Dashboard.showLoadingMsg();
+            ApiClient.ajax({ type: 'POST', url: apiUrl('TestConnection'), dataType: 'json' })
+                .then(function (res) {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert({ message: res.message, title: res.success ? 'Success' : 'Failed' });
+                }).catch(function () {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert({ message: 'Request failed. Check the URL and API key.', title: 'Failed' });
+                });
+        }
+
+        function esc(s) {
+            return (s == null ? '' : String(s))
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function renderMovieList(title, movies, canSync) {
+            if (!movies || movies.length === 0) { return ''; }
+            var html = '<h3>' + esc(title) + ' (' + movies.length + ')</h3><ul class="paperList">';
+            movies.forEach(function (m) {
+                html += '<li class="listItem">';
+                html += '<div class="listItemBody"><div class="listItemBodyText">' + esc(m.Title) + '</div></div>';
+                if (canSync) {
+                    html += '<button is="emby-button" type="button" class="raised syncOne" ' +
+                        'data-item=\'' + esc(JSON.stringify(m)) + '\'><span>Pull</span></button>';
+                }
+                html += '</li>';
+            });
+            return html + '</ul>';
+        }
+
+        function renderSeriesList(title, gaps, canSync) {
+            if (!gaps || gaps.length === 0) { return ''; }
+            var total = gaps.reduce(function (a, g) { return a + (g.MissingEpisodeCount || 0); }, 0);
+            var html = '<h3>' + esc(title) + ' (' + gaps.length + ' shows, ' + total + ' episodes)</h3>';
+            gaps.forEach(function (g) {
+                html += '<div class="verticalSection" style="margin-bottom:0.75em;">';
+                html += '<strong>' + esc(g.SeriesTitle) + '</strong> ';
+                if (g.SeriesEntirelyMissing) {
+                    html += '<em>(entire series missing)</em> ';
+                } else if (g.MissingSeasons && g.MissingSeasons.length) {
+                    html += '<em>(missing seasons: ' + g.MissingSeasons.join(', ') + ')</em> ';
+                }
+                html += '<span class="fieldDescription">' + (g.MissingEpisodeCount || 0) + ' episode(s) missing</span>';
+                if (canSync && g.MissingEpisodes && g.MissingEpisodes.length) {
+                    html += ' <button is="emby-button" type="button" class="raised syncMany" ' +
+                        'data-items=\'' + esc(JSON.stringify(g.MissingEpisodes)) + '\'><span>Pull show</span></button>';
+                    html += '<ul class="paperList">';
+                    g.MissingEpisodes.forEach(function (e) {
+                        var label = 'S' + (e.SeasonNumber != null ? ('0' + e.SeasonNumber).slice(-2) : 'XX') +
+                            'E' + (e.EpisodeNumber != null ? ('0' + e.EpisodeNumber).slice(-2) : 'XX') +
+                            (e.Title ? ' - ' + e.Title : '');
+                        html += '<li class="listItem"><div class="listItemBody"><div class="listItemBodyText">' +
+                            esc(label) + '</div></div>';
+                        html += '<button is="emby-button" type="button" class="raised syncOne" ' +
+                            'data-item=\'' + esc(JSON.stringify(e)) + '\'><span>Pull</span></button></li>';
+                    });
+                    html += '</ul>';
+                }
+                html += '</div>';
+            });
+            return html;
+        }
+
+        function bindSyncButtons(page) {
+            page.querySelectorAll('.syncOne').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var item = JSON.parse(btn.getAttribute('data-item'));
+                    runTransfer(page, [item]);
+                });
+            });
+            page.querySelectorAll('.syncMany').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var items = JSON.parse(btn.getAttribute('data-items'));
+                    runTransfer(page, items);
+                });
+            });
+        }
+
+        function runTransfer(page, items) {
+            Dashboard.showLoadingMsg();
+            ApiClient.ajax({
+                type: 'POST',
+                url: apiUrl('SyncItems'),
+                data: JSON.stringify(items),
+                contentType: 'application/json',
+                dataType: 'json'
+            }).then(function (res) {
+                Dashboard.hideLoadingMsg();
+                var msg = 'Copied ' + res.CopiedCount + ', skipped ' + res.SkippedCount +
+                    ', failed ' + res.FailedCount + '.' + (res.Message ? ' ' + res.Message : '');
+                Dashboard.alert({ message: msg, title: 'Sync result' });
+                compareNow(page);
+            }).catch(function () {
+                Dashboard.hideLoadingMsg();
+                Dashboard.alert({ message: 'Transfer request failed.', title: 'Error' });
+            });
+        }
+
+        function compareNow(page) {
+            Dashboard.showLoadingMsg();
+            byId('comparisonResults').innerHTML = '';
+            byId('comparisonSummary').innerHTML = 'Comparing…';
+            ApiClient.ajax({ type: 'GET', url: apiUrl('Compare'), dataType: 'json' })
+                .then(function (report) {
+                    Dashboard.hideLoadingMsg();
+                    if (report.Error) {
+                        byId('comparisonSummary').innerHTML = esc(report.Error);
+                        byId('syncAllHere').style.display = 'none';
+                        return;
+                    }
+                    var remote = report.RemoteServerName || 'the remote server';
+                    var missingHereMovies = report.MoviesMissingLocally || [];
+                    var missingHereSeries = report.SeriesMissingLocally || [];
+                    var missingThereMovies = report.MoviesMissingRemotely || [];
+                    var missingThereSeries = report.SeriesMissingRemotely || [];
+
+                    var hereEp = missingHereSeries.reduce(function (a, g) { return a + (g.MissingEpisodeCount || 0); }, 0);
+                    byId('comparisonSummary').innerHTML =
+                        'Compared against <strong>' + esc(remote) + '</strong>. ' +
+                        'Missing on <strong>this</strong> server: ' + missingHereMovies.length +
+                        ' movies, ' + hereEp + ' episodes.';
+
+                    var html = '';
+                    html += '<div class="verticalSection"><h2 class="sectionTitle">Missing on THIS server</h2>';
+                    html += renderMovieList('Movies', missingHereMovies, true);
+                    html += renderSeriesList('TV Shows', missingHereSeries, true);
+                    if (missingHereMovies.length === 0 && missingHereSeries.length === 0) {
+                        html += '<p class="fieldDescription">Nothing missing here. 🎉</p>';
+                    }
+                    html += '</div>';
+
+                    html += '<div class="verticalSection" style="margin-top:1.5em;">' +
+                        '<h2 class="sectionTitle">Missing on ' + esc(remote) + ' (report only)</h2>';
+                    html += renderMovieList('Movies', missingThereMovies, false);
+                    html += renderSeriesList('TV Shows', missingThereSeries, false);
+                    if (missingThereMovies.length === 0 && missingThereSeries.length === 0) {
+                        html += '<p class="fieldDescription">Nothing missing there.</p>';
+                    }
+                    html += '</div>';
+
+                    byId('comparisonResults').innerHTML = html;
+                    byId('syncAllHere').style.display =
+                        (missingHereMovies.length + missingHereSeries.length) > 0 ? '' : 'none';
+                    bindSyncButtons(page);
+                }).catch(function () {
+                    Dashboard.hideLoadingMsg();
+                    byId('comparisonSummary').innerHTML = 'Comparison failed. Check the connection settings.';
+                });
+        }
+
+        document.querySelector('#crossServerSyncPage').addEventListener('pageshow', function () {
+            loadConfig(this);
+        });
+
+        document.querySelector('.crossServerSyncConfigForm').addEventListener('submit', function (e) {
+            saveConfig(document.querySelector('#crossServerSyncPage'));
+            e.preventDefault();
+            return false;
+        });
+
+        byId('testConnection').addEventListener('click', testConnection);
+        byId('compareNow').addEventListener('click', function () {
+            compareNow(document.querySelector('#crossServerSyncPage'));
+        });
+        byId('syncAllHere').addEventListener('click', function () {
+            var page = document.querySelector('#crossServerSyncPage');
+            Dashboard.showLoadingMsg();
+            ApiClient.ajax({ type: 'POST', url: apiUrl('Sync'), dataType: 'json' })
+                .then(function (res) {
+                    Dashboard.hideLoadingMsg();
+                    var msg = 'Copied ' + res.CopiedCount + ', skipped ' + res.SkippedCount +
+                        ', failed ' + res.FailedCount + '.' + (res.Message ? ' ' + res.Message : '');
+                    Dashboard.alert({ message: msg, title: 'Sync result' });
+                    compareNow(page);
+                }).catch(function () {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert({ message: 'Sync request failed.', title: 'Error' });
+                });
+        });
+    })();
+    </script>
+</div>
+</body>
+</html>

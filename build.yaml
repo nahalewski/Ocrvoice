@@ -1,0 +1,25 @@
+---
+name: "Cross-Server Sync"
+guid: "b8b5f6a2-3c1e-4e7a-9d2b-2a7f5c9e11d4"
+version: "1.0.0.0"
+targetAbi: "10.10.0.0"
+framework: "net8.0"
+overview: "Sync missing movies and episodes between two Jellyfin servers by metadata, without overwriting files."
+description: >
+  Compares this Jellyfin server's Movies and TV Shows against a second Jellyfin
+  server using Jellyfin metadata (provider IDs and season/episode numbers) rather
+  than file names, and fills in what is missing. It never overwrites existing
+  files, is aware of movie / TV folder structuring, and keeps a configurable
+  amount of free space (default 100 GB) on the target drive. A dashboard page
+  shows exactly which shows are missing seasons or episodes versus the other
+  server, and can pull them on demand or automatically.
+category: "Sync"
+owner: "nahalewski"
+artifacts:
+  - "Jellyfin.Plugin.CrossServerSync.dll"
+changelog: >
+  1.0.0.0
+  - Initial release: metadata-based comparison of Movies and TV Shows between two
+    servers, no-overwrite pulling, folder-structure aware destinations, 100 GB
+    free-space floor, dashboard UI showing missing seasons/episodes, per-item and
+    bulk pull, optional auto-sync, and a scheduled comparison/sync task.
